@@ -1,0 +1,3 @@
+This sample document explains the purpose of the RAG starter project.
+It can extract text from PDFs, images, and plain text files.
+The app uses simple chunking and keyword-based retrieval to find relevant content.
