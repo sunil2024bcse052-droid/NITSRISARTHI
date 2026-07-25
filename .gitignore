@@ -1,0 +1,11 @@
+.venv/
+venv/
+chroma_db/
+__pycache__/
+.env
+tessdata/
+doc/
+*.exe
+*.dll
+*.1.html
+*.5.html
