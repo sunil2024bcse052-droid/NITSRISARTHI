@@ -15,6 +15,18 @@ COLLECTION_NAME = "college_docs"
 
 TIMETABLE_KEYWORDS = ["timetable", "time table", "schedule", "class timing", "hour", "period"]
 
+# Cache the ChromaDB client/collection so we don't reconnect on every question
+_chroma_client = None
+_chroma_collection = None
+
+
+def get_collection():
+    global _chroma_client, _chroma_collection
+    if _chroma_collection is None:
+        _chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+        _chroma_collection = _chroma_client.get_or_create_collection(name=COLLECTION_NAME)
+    return _chroma_collection
+
 
 def is_timetable_question(question):
     q = question.lower()
@@ -50,11 +62,14 @@ def extract_timetable_filters(question):
 
 
 def search_documents(query, top_k=3):
-    client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-    collection = client.get_or_create_collection(name=COLLECTION_NAME)
-    results = collection.query(query_texts=[query], n_results=top_k)
-    documents = results.get("documents", [[]])[0]
-    return documents
+    try:
+        collection = get_collection()
+        results = collection.query(query_texts=[query], n_results=top_k)
+        documents = results.get("documents", [[]])[0]
+        return documents
+    except Exception as e:
+        print(f"ChromaDB search error: {e}")
+        return []
 
 
 def ask_document_question(question):
@@ -76,23 +91,44 @@ Question: {question}
 
 Answer:"""
 
-    response = client_groq.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    return response.choices[0].message.content
+    try:
+        response = client_groq.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            timeout=15,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"Groq API error: {e}")
+        return "Sorry, I'm having trouble generating an answer right now. Please try again in a moment."
 
 
 def ask_chatbot(question):
+    if not question or not question.strip():
+        return "Please type a question so I can help you."
+
     if is_timetable_question(question):
         semester, section, day = extract_timetable_filters(question)
+
+        missing = []
+        if not semester:
+            missing.append("semester (e.g. 3rd, 5th, 7th)")
+        if not section:
+            missing.append("section (A or B)")
+
+        if missing:
+            return (
+                "Please tell me your " + " and ".join(missing) +
+                " so I can find the right timetable. "
+                "Example: 'timetable for 3rd semester section A on Monday'"
+            )
+
         rows = get_timetable(semester=semester, section=section, day=day)
 
         if not rows:
             return (
-                "I couldn't find a matching timetable entry. "
-                "Try mentioning semester (e.g. 3rd, 5th, 7th), section (A/B), and day clearly."
+                "I couldn't find a matching timetable entry for that semester, section, "
+                "and day. Please double check the details and try again."
             )
 
         return format_timetable_results(rows)
