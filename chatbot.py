@@ -61,7 +61,7 @@ def extract_timetable_filters(question):
     return semester, section, day
 
 
-def search_documents(query, top_k=3):
+def search_documents(query, top_k=8):
     try:
         collection = get_collection()
         results = collection.query(query_texts=[query], n_results=top_k)

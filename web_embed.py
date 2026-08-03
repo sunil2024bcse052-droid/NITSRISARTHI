@@ -5,10 +5,11 @@ import chromadb
 CHROMA_DB_PATH = "chroma_db"
 COLLECTION_NAME = "college_docs"
 
-# List of NIT Srinagar pages to pull data from
+
 def load_urls_from_file(filename):
     with open(filename, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip()]
+
 
 URLS = load_urls_from_file("crawled_pages.txt")
 
@@ -27,20 +28,41 @@ def chunk_text(text, chunk_size=500, chunk_overlap=50):
     return splitter.split_text(text)
 
 
-def add_to_chromadb(chunks, source_name):
+def add_to_chromadb(chunks_with_sources, seen_chunks):
     client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
     collection = client.get_or_create_collection(name=COLLECTION_NAME)
 
     existing_count = collection.count()
 
-    ids = [f"web_{source_name}_{i}_{existing_count}" for i in range(len(chunks))]
-    metadatas = [{"source": source_name} for _ in chunks]
+    final_chunks = []
+    final_sources = []
+
+    for chunk, source in chunks_with_sources:
+        stripped = chunk.strip()
+
+        if len(stripped) < 100:
+            continue  # too short, likely junk
+
+        if stripped in seen_chunks:
+            continue  # duplicate of something already added
+
+        seen_chunks.add(stripped)
+        final_chunks.append(chunk)
+        final_sources.append(source)
+
+    if not final_chunks:
+        return 0
+
+    ids = [f"web_{i}_{existing_count}" for i in range(len(final_chunks))]
+    metadatas = [{"source": s} for s in final_sources]
 
     collection.add(
-        documents=chunks,
+        documents=final_chunks,
         ids=ids,
         metadatas=metadatas,
     )
+
+    return len(final_chunks)
 
 
 def main():
@@ -48,23 +70,26 @@ def main():
     documents = load_web_pages(URLS)
     print(f"Loaded {len(documents)} pages successfully.")
 
-    total_chunks_added = 0
+    seen_chunks = set()
+    all_chunks_with_sources = []
 
     for doc in documents:
         source_url = doc.metadata.get("source", "unknown")
         text = doc.page_content
 
         if not text.strip():
-            print(f"Skipping empty page: {source_url}")
             continue
 
         chunks = chunk_text(text)
-        add_to_chromadb(chunks, source_name=source_url)
+        for chunk in chunks:
+            all_chunks_with_sources.append((chunk, source_url))
 
-        print(f"Added {len(chunks)} chunks from: {source_url}")
-        total_chunks_added += len(chunks)
+    print(f"\nTotal raw chunks before dedup: {len(all_chunks_with_sources)}")
 
-    print(f"\nDone. Total new chunks added: {total_chunks_added}")
+    added_count = add_to_chromadb(all_chunks_with_sources, seen_chunks)
+
+    print(f"Total unique chunks added: {added_count}")
+    print(f"Duplicates/junk skipped: {len(all_chunks_with_sources) - added_count}")
 
 
 if __name__ == "__main__":
