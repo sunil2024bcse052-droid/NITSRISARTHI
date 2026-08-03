@@ -2,3 +2,11 @@ pypdf
 langchain-text-splitters
 pytesseract
 pillow
+python-dotenv
+chromadb
+groq
+streamlit
+langchain
+sentence-transformers
+pypdf
+
