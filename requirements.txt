@@ -9,4 +9,4 @@ streamlit
 langchain
 sentence-transformers
 pypdf
-
+pysqlite3-binary
