@@ -8,7 +8,16 @@ from timetable_lookup import get_timetable, format_timetable_results
 
 load_dotenv()
 
-client_groq = Groq(api_key=os.getenv("GROQ_API_KEY"))
+import streamlit as st
+
+def get_groq_api_key():
+    # Try Streamlit secrets first (for deployed app), fallback to .env (for local)
+    try:
+        return st.secrets["GROQ_API_KEY"]
+    except Exception:
+        return os.getenv("GROQ_API_KEY")
+
+client_groq = Groq(api_key=get_groq_api_key())
 
 CHROMA_DB_PATH = "chroma_db"
 COLLECTION_NAME = "college_docs"
